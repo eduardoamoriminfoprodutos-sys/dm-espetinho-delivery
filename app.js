@@ -7,6 +7,9 @@
 var LSKEY = 'dm_delivery_v7';           // estado compartilhado (loja, cardápio, pedidos, clientes)
 var MEKEY = 'dm_delivery_me';           // perfil do cliente (local, não sincroniza entre cliente/dono)
 var APP_MODE = (typeof window!=='undefined' && window.DM_APP==='admin') ? 'admin' : 'cliente';
+var REVKEY = 'dm_delivery_rev';          // token de versão: muda a cada gravação, pra detectar mudança de outra aba/PWA
+var lastRev = null;
+var bc = null; try{ if(typeof BroadcastChannel!=='undefined') bc = new BroadcastChannel('dm_delivery'); }catch(e){ bc=null; }
 var $  = function(id){ return document.getElementById(id); };
 var esc = function(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
 var money = function(v){ return 'R$ ' + (Number(v)||0).toFixed(2).replace('.', ','); };
@@ -188,7 +191,15 @@ function seedOrder(o){
 }
 
 /* persistência */
-function save(){ try{ localStorage.setItem(LSKEY, JSON.stringify(S)); if(APP_MODE!=='admin') localStorage.setItem(MEKEY, JSON.stringify(UI.me)); }catch(e){} }
+function save(){ try{ localStorage.setItem(LSKEY, JSON.stringify(S)); if(APP_MODE!=='admin') localStorage.setItem(MEKEY, JSON.stringify(UI.me)); marcarRev(); }catch(e){} }
+function marcarRev(){ try{ lastRev=String(Date.now())+'-'+Math.floor(Math.random()*1e6); localStorage.setItem(REVKEY,lastRev); if(bc){ try{ bc.postMessage(lastRev); }catch(e){} } }catch(e){} }
+function reloadShared(){ try{ var raw=localStorage.getItem(LSKEY); if(raw){ var s=JSON.parse(raw); if(s&&s.produtos){ S=s; if(!S.promos)S.promos=[]; return true; } } }catch(e){} return false; }
+function syncCheck(){
+  var ae=(typeof document!=='undefined')&&document.activeElement;
+  if(ae && ae.tagName && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return; // não interrompe quem está digitando
+  var rev; try{ rev=localStorage.getItem(REVKEY); }catch(e){ return; }
+  if(rev && rev!==lastRev){ lastRev=rev; if(reloadShared()) render(); }
+}
 function load(){
   var had=false;
   try{ var raw=localStorage.getItem(LSKEY); if(raw){ var s=JSON.parse(raw); if(s&&s.produtos){ S=s; if(!S.promos)S.promos=[]; had=true; } } }catch(e){}
@@ -1382,10 +1393,14 @@ function boot(){
   initUI(); seed();
   var restored=load();
   if(restored){ var maxN=100; S.pedidos.forEach(function(p){ var n=parseInt(String(p.id).replace('#',''),10); if(n>maxN)maxN=n; }); seedCounter=maxN; }
+  try{ lastRev=localStorage.getItem(REVKEY); }catch(e){}
   render();
 }
-/* Sincronização entre abas: quando a OUTRA aba grava o estado compartilhado, recarrega e re-renderiza. */
-window.addEventListener('storage', function(e){
-  if(e.key===LSKEY && e.newValue){ try{ var s=JSON.parse(e.newValue); if(s&&s.produtos){ S=s; if(!S.promos)S.promos=[]; render(); } }catch(err){} }
-});
+/* Sincronização entre abas E apps instalados (PWA): storage + BroadcastChannel + polling + foco/visibilidade.
+   O polling (a cada 1.5s) garante o sync mesmo no PWA, onde o evento 'storage' não cruza a janela. */
+if(bc){ bc.onmessage=function(ev){ if(ev&&ev.data&&ev.data!==lastRev){ lastRev=ev.data; if(reloadShared()) render(); } }; }
+window.addEventListener('storage', function(e){ if(e.key===LSKEY||e.key===REVKEY) syncCheck(); });
+window.addEventListener('focus', syncCheck);
+if(typeof document!=='undefined') document.addEventListener('visibilitychange', function(){ if(!document.hidden) syncCheck(); });
+setInterval(syncCheck, 1500);
 boot();
