@@ -1392,7 +1392,7 @@ function pickImage(cb){
 function initUI(){
   UI={ app:APP_MODE, cli:{screen:'home',cat:'Todos',q:''},
     chk:{modo:null,bairro:'',rua:'',numero:'',comp:'',ref:'',nome:'',whats:'',pay:null,troco:'',comprov:null,obs:''}, cupom:null,
-    cart:[], me:{nome:'Mariana Silva',tel:'(94) 99999-1234',foto:null,enderecos:[{bairro:'Centro',rua:'Rua das Palmeiras',numero:'42',comp:'Casa',ref:'Perto da praça',end:'Rua das Palmeiras, 42'}]},
+    cart:[], me:{nome:'',tel:'',foto:null,enderecos:[]},
     curOrder:null, _pdId:null,
     adm:{logged:false,user:null,tab:'visao',filter:'todos',filterTipo:'todos',filterPay:'todos',order:null,mais:null,relPer:'tudo',cliQ:'',cliFilter:'todos',_pedit:null} };
 }
