@@ -11,6 +11,11 @@ var REVKEY = 'dm_delivery_rev';          // token de versão: muda a cada grava�
 var CARTKEY = 'dm_delivery_cart';        // carrinho do cliente (local, sobrevive ao recarregar)
 var lastRev = null;
 var bc = null; try{ if(typeof BroadcastChannel!=='undefined') bc = new BroadcastChannel('dm_delivery'); }catch(e){ bc=null; }
+/* ===== Sincronização na nuvem (Supabase) — cross-device (celular <-> computador) ===== */
+var SUPA_URL = 'https://qnsivomwbuftjxkwalcw.supabase.co';
+var SUPA_KEY = 'sb_publishable_Tv03zqfFDSIqCwj6029Usg_cJhQ6kih';
+var CLOUD = !!(SUPA_URL && SUPA_KEY && typeof window!=='undefined' && window.supabase);
+var sb = CLOUD ? window.supabase.createClient(SUPA_URL, SUPA_KEY) : null;
 var $  = function(id){ return document.getElementById(id); };
 var esc = function(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
 var money = function(v){ return 'R$ ' + (Number(v)||0).toFixed(2).replace('.', ','); };
@@ -194,7 +199,7 @@ function seedOrder(o){
 /* persistência */
 function persistLocal(){ if(APP_MODE==='admin') return; try{ localStorage.setItem(MEKEY, JSON.stringify(UI.me)); localStorage.setItem(CARTKEY, JSON.stringify(UI.cart)); }catch(e){} }
 function saveCliente(){ persistLocal(); }   // salva perfil + carrinho do cliente, sem mexer/avisar o painel
-function save(){ try{ localStorage.setItem(LSKEY, JSON.stringify(S)); persistLocal(); marcarRev(); }catch(e){} }
+function save(){ try{ localStorage.setItem(LSKEY, JSON.stringify(S)); persistLocal(); if(CLOUD) cloudPush(); else marcarRev(); }catch(e){} }
 function marcarRev(){ try{ lastRev=String(Date.now())+'-'+Math.floor(Math.random()*1e6); localStorage.setItem(REVKEY,lastRev); if(bc){ try{ bc.postMessage(lastRev); }catch(e){} } }catch(e){} }
 function reloadShared(){ try{ var raw=localStorage.getItem(LSKEY); if(raw){ var s=JSON.parse(raw); if(s&&s.produtos){ S=s; if(!S.promos)S.promos=[]; return true; } } }catch(e){} return false; }
 function syncCheck(){
@@ -1405,9 +1410,43 @@ function boot(){
 }
 /* Sincronização entre abas E apps instalados (PWA): storage + BroadcastChannel + polling + foco/visibilidade.
    O polling (a cada 1.5s) garante o sync mesmo no PWA, onde o evento 'storage' não cruza a janela. */
-if(bc){ bc.onmessage=function(ev){ if(ev&&ev.data&&ev.data!==lastRev){ lastRev=ev.data; if(reloadShared()) render(); } }; }
-window.addEventListener('storage', function(e){ if(e.key===LSKEY||e.key===REVKEY) syncCheck(); });
-window.addEventListener('focus', syncCheck);
-if(typeof document!=='undefined') document.addEventListener('visibilitychange', function(){ if(!document.hidden) syncCheck(); });
-setInterval(syncCheck, 1000);
-boot();
+/* ---- nuvem (Supabase): estado compartilhado entre todos os aparelhos ---- */
+function cloudPush(){
+  if(!sb) return;
+  lastRev = String(Date.now())+'-'+Math.floor(Math.random()*1e6);
+  sb.from('estado').upsert({id:1,data:S,rev:lastRev,updated_at:new Date().toISOString()}).then(function(r){ if(r&&r.error) console.warn('DM cloud push:', r.error.message); });
+}
+function aplicarNuvem(row){
+  if(!row||!row.rev||row.rev===lastRev) return false;
+  if(!row.data||!row.data.produtos) return false;
+  lastRev=row.rev; S=row.data; if(!S.promos)S.promos=[];
+  var maxN=100; S.pedidos.forEach(function(p){ var n=parseInt(String(p.id).replace('#',''),10); if(n>maxN)maxN=n; }); if(maxN>seedCounter)seedCounter=maxN;
+  return true;
+}
+function cloudPull(){
+  if(!sb) return Promise.resolve();
+  return sb.from('estado').select('data,rev').eq('id',1).single().then(function(r){ if(r&&r.data&&aplicarNuvem(r.data)) render(); }).catch(function(){});
+}
+function cloudSubscribe(){ if(!sb) return; try{ sb.channel('estado-rt').on('postgres_changes',{event:'*',schema:'public',table:'estado'}, function(){ cloudPull(); }).subscribe(); }catch(e){} }
+function cloudBoot(){
+  initUI(); seed(); load(); render();   // pinta na hora com cache local; a nuvem sobrescreve em seguida
+  sb.from('estado').select('data,rev').eq('id',1).single().then(function(r){
+    if(r&&r.data&&r.data.data&&r.data.data.produtos){ if(aplicarNuvem(r.data)) render(); }
+    else { cloudPush(); }   // nuvem vazia -> sobe o cardápio atual
+  }).catch(function(e){ console.warn('DM cloud boot:', e&&e.message); });
+  cloudSubscribe();
+  setInterval(cloudPull, 5000);   // reforço caso o tempo-real caia
+}
+
+if(CLOUD){
+  cloudBoot();
+  window.addEventListener('focus', function(){ cloudPull(); });
+  if(typeof document!=='undefined') document.addEventListener('visibilitychange', function(){ if(!document.hidden) cloudPull(); });
+} else {
+  if(bc){ bc.onmessage=function(ev){ if(ev&&ev.data&&ev.data!==lastRev){ lastRev=ev.data; if(reloadShared()) render(); } }; }
+  window.addEventListener('storage', function(e){ if(e.key===LSKEY||e.key===REVKEY) syncCheck(); });
+  window.addEventListener('focus', syncCheck);
+  if(typeof document!=='undefined') document.addEventListener('visibilitychange', function(){ if(!document.hidden) syncCheck(); });
+  setInterval(syncCheck, 1000);
+  boot();
+}
