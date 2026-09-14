@@ -1,0 +1,14 @@
+{
+  "name": "DM Espetinho Delivery",
+  "short_name": "DM Delivery",
+  "description": "Peça espetos, açaí e bebidas do DM Espetinho com entrega ou retirada.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#171313",
+  "theme_color": "#171313",
+  "icons": [
+    { "src": "assets/logo-dm.jpg", "sizes": "192x192", "type": "image/jpeg", "purpose": "any" },
+    { "src": "assets/logo-dm.jpg", "sizes": "512x512", "type": "image/jpeg", "purpose": "any" }
+  ]
+}

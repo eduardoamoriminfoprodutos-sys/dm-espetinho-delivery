@@ -1,0 +1,14 @@
+{
+  "name": "DM Espetinho Painel",
+  "short_name": "DM Painel",
+  "description": "Painel do dono do DM Espetinho: pedidos, pagamentos, cardápio e relatórios.",
+  "start_url": "./admin.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#171313",
+  "theme_color": "#171313",
+  "icons": [
+    { "src": "assets/logo-dm.jpg", "sizes": "192x192", "type": "image/jpeg", "purpose": "any" },
+    { "src": "assets/logo-dm.jpg", "sizes": "512x512", "type": "image/jpeg", "purpose": "any" }
+  ]
+}
