@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DM Espetinho · Prévia do cupom</title>
+<style>
+  :root{ --bg:#171313; --panel:#262020; --gold:#F4B900; --text:#FFF8EE; --text2:#C9BCAD; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:24px 16px 60px}
+  .head{max-width:720px;margin:0 auto 20px;text-align:center}
+  .head h1{font-size:20px;margin:0 0 4px}
+  .head p{color:var(--text2);font-size:13px;margin:0}
+  .toolbar{max-width:720px;margin:0 auto 22px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .btn{border:none;cursor:pointer;font-weight:700;font-size:14px;border-radius:12px;padding:12px 18px}
+  .btn-p{background:linear-gradient(135deg,#FFD45A,var(--gold));color:#171313}
+  .btn-o{background:transparent;border:1.5px solid #4a3e3b;color:var(--text)}
+  .row{display:flex;gap:26px;justify-content:center;flex-wrap:wrap;align-items:flex-start}
+  .col{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .col-tag{color:var(--text2);font-size:12px;font-weight:600;letter-spacing:.4px;text-transform:uppercase}
+
+  /* --- Cupom térmico (80mm) --- */
+  .ticket{font-family:'Courier New',ui-monospace,monospace;background:#fff;color:#000;width:300px;padding:16px 14px;
+    box-shadow:0 10px 30px rgba(0,0,0,.45);border-radius:3px}
+  .ticket .logo{width:60px;height:60px;object-fit:contain;display:block;margin:0 auto 6px;border-radius:8px}
+  .ticket h2{font-size:18px;text-align:center;margin:0;letter-spacing:1px}
+  .c{text-align:center;font-size:12px}
+  .strong{font-weight:800;margin-top:3px}
+  .big{font-size:34px;font-weight:800;text-align:center;margin:8px 0 4px;letter-spacing:2px}
+  .reimp{text-align:center;font-weight:800;border:2px solid #000;padding:4px;margin:6px 0;font-size:13px;letter-spacing:1px}
+  hr{border:none;border-top:1px dashed #000;margin:9px 0}
+  .l{display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0;gap:8px}
+  .l .r{text-align:right}
+  .it{font-size:13px;font-weight:700;margin-top:6px}
+  .sub{font-size:11.5px;padding-left:14px;line-height:1.35}
+  .tot{display:flex;justify-content:space-between;font-size:15px;font-weight:800;padding:3px 0}
+  .foot{text-align:center;font-size:11px;margin-top:6px}
+
+  @media print{
+    body{background:#fff;padding:0}
+    .head,.toolbar,.col-tag{display:none!important}
+    .row{display:block}
+    .col{margin:0}
+    .ticket{box-shadow:none;width:80mm;page-break-after:always}
+  }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>Prévia do cupom de cozinha</h1>
+    <p>É assim que o pedido sai na impressora quando o dono aceita. Toque em Imprimir para testar na sua impressora.</p>
+  </div>
+  <div class="toolbar">
+    <button class="btn btn-p" onclick="window.print()">🖨 Imprimir</button>
+    <button class="btn btn-o" onclick="document.body.classList.toggle('so-original')">Ver só o Original</button>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <span class="col-tag">Original (ao aceitar o pedido)</span>
+      <div class="ticket" id="tk-original"></div>
+    </div>
+    <div class="col so-hide">
+      <span class="col-tag">Reimpressão (2ª via)</span>
+      <div class="ticket" id="tk-reimp"></div>
+    </div>
+  </div>
+
+<script>
+  var money=function(v){return 'R$ '+(Number(v)||0).toFixed(2).replace('.',',');};
+  // Pedido de exemplo (mesmo formato do sistema)
+  var pedido={
+    id:'#0134', dia:'14/09/2026', criadoEm:'20:12', tipo:'delivery',
+    nome:'Eduardo Santos de Amorim', tel:'(94) 98130-7377',
+    end:'Av. Getúlio Vargas, 128', bairro:'Centro', ref:'Portão azul, ao lado da praça',
+    itens:[
+      {qty:1, nome:'Picanha', det:'Completo · + 2x Arroz branco', obs:'Bem passada', preco:47},
+      {qty:2, nome:'Espetinho de Linguiça', det:'', obs:'', preco:28},
+      {qty:1, nome:'Refrigerante Lata', det:'', obs:'Guaraná', preco:5}
+    ],
+    subtotal:80, taxa:3, total:83, pagto:'Dinheiro no local', troco:'100', obs:'Entregar o troco em nota de 20'
+  };
+  function cupom(o,reimp){
+    var itens=o.itens.map(function(i){
+      return '<div class="it">'+i.qty+'x '+i.nome+'</div>'+
+        (i.det?'<div class="sub">'+i.det+'</div>':'')+
+        (i.obs?'<div class="sub">Obs.: '+i.obs+'</div>':'')+
+        '<div class="l"><span></span><span class="r">'+money(i.preco)+'</span></div>';
+    }).join('');
+    return '<h2>DM ESPETINHO</h2><div class="c">CUPOM DE COZINHA</div>'+
+      (reimp?'<div class="reimp">*** REIMPRESSAO ***</div>':'<div class="c strong">ORIGINAL</div>')+
+      '<div class="big">'+o.id+'</div><hr>'+
+      '<div class="l"><span>'+o.dia+'</span><span class="r">'+o.criadoEm+'</span></div>'+
+      '<div class="l"><span>Tipo</span><span class="r"><b>'+(o.tipo==='delivery'?'ENTREGA':'RETIRADA')+'</b></span></div>'+
+      '<div class="l"><span>Cliente</span><span class="r">'+o.nome+'</span></div>'+
+      '<div class="l"><span>Fone</span><span class="r">'+o.tel+'</span></div>'+
+      (o.tipo==='delivery'?'<div class="l"><span>End.</span><span class="r">'+o.end+' - '+o.bairro+'</span></div>'+
+        '<div class="l"><span>Ref.</span><span class="r">'+o.ref+'</span></div>':'')+
+      '<hr>'+itens+'<hr>'+
+      '<div class="l"><span>Subtotal</span><span class="r">'+money(o.subtotal)+'</span></div>'+
+      (o.tipo==='delivery'?'<div class="l"><span>Taxa entrega</span><span class="r">'+money(o.taxa)+'</span></div>':'')+
+      '<div class="tot"><span>TOTAL</span><span>'+money(o.total)+'</span></div>'+
+      '<div class="l"><span>Pagto</span><span class="r">'+o.pagto+'</span></div>'+
+      (o.troco?'<div class="l"><span>Troco p/</span><span class="r">'+money(o.troco)+'</span></div>':'')+
+      (o.obs?'<div class="sub" style="padding-left:0;margin-top:6px"><b>Obs. do pedido:</b> '+o.obs+'</div>':'')+
+      '<hr><div class="foot">Levar este cupom a cozinha<br>DM Espetinho · Obrigado!</div>';
+  }
+  document.getElementById('tk-original').innerHTML=cupom(pedido,false);
+  document.getElementById('tk-reimp').innerHTML=cupom(pedido,true);
+  var st=document.createElement('style');
+  st.textContent='.so-original .so-hide{display:none}';
+  document.head.appendChild(st);
+</script>
+</body>
+</html>

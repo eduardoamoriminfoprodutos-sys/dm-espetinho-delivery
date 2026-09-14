@@ -358,6 +358,7 @@ button.kpi{font-family:inherit}
 .clirow .cl-r{margin-left:auto;text-align:right}.clirow .cl-r b{color:var(--gold2)}
 .pf-imgwrap{text-align:center;margin:8px 0}
 .pf-imgwrap img{width:120px;height:120px;border-radius:16px;object-fit:cover;display:block;margin:0 auto 8px}
+.pf-imgbtns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .mk-logo-wrap{text-align:center}.mk-logo-wrap img{width:96px;height:96px;border-radius:20px;object-fit:cover;display:block;margin:0 auto 8px}
 
 /* ---------- Notices ---------- */

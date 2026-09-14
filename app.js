@@ -8,6 +8,7 @@ var LSKEY = 'dm_delivery_v7';           // estado compartilhado (loja, cardápio
 var MEKEY = 'dm_delivery_me';           // perfil do cliente (local, não sincroniza entre cliente/dono)
 var APP_MODE = (typeof window!=='undefined' && window.DM_APP==='admin') ? 'admin' : 'cliente';
 var REVKEY = 'dm_delivery_rev';          // token de versão: muda a cada gravação, pra detectar mudança de outra aba/PWA
+var CARTKEY = 'dm_delivery_cart';        // carrinho do cliente (local, sobrevive ao recarregar)
 var lastRev = null;
 var bc = null; try{ if(typeof BroadcastChannel!=='undefined') bc = new BroadcastChannel('dm_delivery'); }catch(e){ bc=null; }
 var $  = function(id){ return document.getElementById(id); };
@@ -191,7 +192,9 @@ function seedOrder(o){
 }
 
 /* persistência */
-function save(){ try{ localStorage.setItem(LSKEY, JSON.stringify(S)); if(APP_MODE!=='admin') localStorage.setItem(MEKEY, JSON.stringify(UI.me)); marcarRev(); }catch(e){} }
+function persistLocal(){ if(APP_MODE==='admin') return; try{ localStorage.setItem(MEKEY, JSON.stringify(UI.me)); localStorage.setItem(CARTKEY, JSON.stringify(UI.cart)); }catch(e){} }
+function saveCliente(){ persistLocal(); }   // salva perfil + carrinho do cliente, sem mexer/avisar o painel
+function save(){ try{ localStorage.setItem(LSKEY, JSON.stringify(S)); persistLocal(); marcarRev(); }catch(e){} }
 function marcarRev(){ try{ lastRev=String(Date.now())+'-'+Math.floor(Math.random()*1e6); localStorage.setItem(REVKEY,lastRev); if(bc){ try{ bc.postMessage(lastRev); }catch(e){} } }catch(e){} }
 function reloadShared(){ try{ var raw=localStorage.getItem(LSKEY); if(raw){ var s=JSON.parse(raw); if(s&&s.produtos){ S=s; if(!S.promos)S.promos=[]; return true; } } }catch(e){} return false; }
 function syncCheck(){
@@ -204,6 +207,7 @@ function load(){
   var had=false;
   try{ var raw=localStorage.getItem(LSKEY); if(raw){ var s=JSON.parse(raw); if(s&&s.produtos){ S=s; if(!S.promos)S.promos=[]; had=true; } } }catch(e){}
   try{ var m=localStorage.getItem(MEKEY); if(m){ var mm=JSON.parse(m); if(mm&&typeof mm==='object') UI.me=mm; } }catch(e){}
+  if(APP_MODE!=='admin'){ try{ var ck=localStorage.getItem(CARTKEY); if(ck){ var ct=JSON.parse(ck); if(Array.isArray(ct)) UI.cart=ct; } }catch(e){} }
   return had;
 }
 
@@ -1097,12 +1101,12 @@ on('pd-add',function(d){
   var item={prodId:p.id,nome:p.nome,cat:p.cat,hue:p.hue,foto:p.foto,base:base,varNome:varNome,inclui:inclui,adics:adics,qty:pdSel.qty,obs:pdSel.obs,preco:unit};
   if(pdSel.edit!=null){ UI.cart[pdSel.edit]=item; toast('Item atualizado','ok'); }
   else { UI.cart.push(item); toast(pdSel.qty+'x '+p.nome+' na sacola','ok'); }
-  closeModal(); render();
+  saveCliente(); closeModal(); render();
 });
-on('cart-inc',function(d){ UI.cart[+d.i].qty++; render(); });
-on('cart-dec',function(d){ var i=+d.i; if(UI.cart[i].qty>1){ UI.cart[i].qty--; render(); } else H['cart-rm'](d); });
+on('cart-inc',function(d){ UI.cart[+d.i].qty++; saveCliente(); render(); });
+on('cart-dec',function(d){ var i=+d.i; if(UI.cart[i].qty>1){ UI.cart[i].qty--; saveCliente(); render(); } else H['cart-rm'](d); });
 on('cart-rm',function(d){ var i=+d.i; var it=UI.cart[i]; if(!it) return;
-  confirmar('Remover item?','Remover "'+it.nome+'" da sacola?','Remover',function(){ UI.cart.splice(i,1); render(); toast('Item removido','info'); },true); });
+  confirmar('Remover item?','Remover "'+it.nome+'" da sacola?','Remover',function(){ UI.cart.splice(i,1); saveCliente(); render(); toast('Item removido','info'); },true); });
 function revalidarCarrinho(){
   var avisos=[];
   for(var i=UI.cart.length-1;i>=0;i--){
@@ -1134,8 +1138,10 @@ on('chk-endok',function(){
 });
 on('chk-dadosok',function(){
   var c=UI.chk;
-  if(!(c.nome||'').trim()){ toast('Informe seu nome','err'); return; }
-  if(!telValido(c.whats)){ toast('Cadastre um WhatsApp válido com DDD — o restaurante precisa dele pra avisar sobre o pedido','err'); return; }
+  var nome=(c.nome||UI.me.nome||'').trim(), whats=(c.whats||UI.me.tel||'').trim();
+  if(!nome){ toast('Informe seu nome','err'); return; }
+  if(!telValido(whats)){ toast('Cadastre um WhatsApp válido com DDD — o restaurante precisa dele pra avisar sobre o pedido','err'); return; }
+  c.nome=nome; c.whats=whats;   // fixa os valores (inclusive quando vieram do perfil já cadastrado)
   UI.cli.screen='pagamento'; render();
 });
 on('chk-pay',function(d){ UI.chk.pay=d.p; render(); });
@@ -1175,7 +1181,7 @@ on('cli-repetir',function(d){
   var o=order(d.id); if(!o) return;
   o.itens.forEach(function(i){ UI.cart.push(JSON.parse(JSON.stringify(i))); });
   var av=revalidarCarrinho();
-  UI.cli.screen='home'; render();
+  saveCliente(); UI.cli.screen='home'; render();
   toast(av.length?('Itens adicionados. '+av[0]):'Itens adicionados à sacola','ok');
 });
 on('cli-cancelar',function(d){
@@ -1187,9 +1193,9 @@ on('cli-cancelar',function(d){
 });
 on('cli-reenviar',function(d){ var o=order(d.id); if(!o) return; pickImage(function(u){ o.pay.comprovante=u; o.pay.status='enviado'; o.status='em_validacao'; o.historico.unshift({t:nowHM(),who:'Cliente',act:'Reenviou o comprovante'}); save(); toast('Comprovante reenviado','ok'); render(); }); });
 on('me-f',function(d,t){ UI.me[d.k]=t.value; });
-on('me-salvar',function(){ save(); toast('Dados salvos','ok'); render(); });
-on('me-foto',function(){ pickImage(function(u){ UI.me.foto=u; save(); render(); toast('Foto de perfil atualizada','ok'); }); });
-on('me-endrm',function(d){ var i=+d.i; confirmar('Remover endereço?','','Remover',function(){ UI.me.enderecos.splice(i,1); save(); render(); },true); });
+on('me-salvar',function(){ saveCliente(); toast('Dados salvos','ok'); render(); });
+on('me-foto',function(){ pickImage(function(u){ UI.me.foto=u; saveCliente(); render(); toast('Foto de perfil atualizada','ok'); }); });
+on('me-endrm',function(d){ var i=+d.i; confirmar('Remover endereço?','','Remover',function(){ UI.me.enderecos.splice(i,1); saveCliente(); render(); },true); });
 on('me-endadd',function(){
   modal('<h2>Novo endereço</h2>'+
     '<div class="field"><label>Bairro *</label><input id="na-bairro" placeholder="Ex.: Centro"></div>'+
@@ -1202,7 +1208,7 @@ on('me-endadd',function(){
 on('me-endsave',function(){
   var bairro=$('na-bairro').value.trim(), rua=$('na-rua').value.trim(), num=$('na-num').value.trim(), ref=$('na-ref').value.trim();
   if(!bairro||!rua||!num||!ref){ toast('Preencha bairro, rua, número e referência','err'); return; }
-  UI.me.enderecos.unshift({bairro:bairro,rua:rua,numero:num,comp:$('na-comp').value.trim(),ref:ref,end:rua+', '+num}); save(); closeModal(); toast('Endereço salvo','ok'); render(); });
+  UI.me.enderecos.unshift({bairro:bairro,rua:rua,numero:num,comp:$('na-comp').value.trim(),ref:ref,end:rua+', '+num}); saveCliente(); closeModal(); toast('Endereço salvo','ok'); render(); });
 
 /* ============================================================================
    HANDLERS — ADMIN
@@ -1273,7 +1279,7 @@ function prodFormHTML(){
     return '<div class="soft"><div class="soft-head"><strong>'+esc(g.nome)+(g.max>0?' <span class="muted small2">(até '+g.max+')</span>':'')+'</strong><button class="ci-trash sm" data-action="pf-rm-grupo" data-g="'+gi+'" aria-label="Remover">'+ic('trash')+'</button></div>'+(itens||'<div class="muted small2 mb6">Sem itens</div>')+'<button class="btn btn-ghost btn-sm btn-block" data-action="pf-add-gitem" data-g="'+gi+'">'+ic('plus')+' Item</button></div>';
   }).join('');
   return '<h2>'+(novo?'Novo produto':'Editar produto')+'</h2>'+
-    '<div class="pf-imgwrap"><img id="pf-img" src="'+prodImg(p)+'"><button class="btn btn-outline btn-sm" data-action="pf-foto">'+ic('camera')+' '+(p.foto?'Trocar foto':'Adicionar foto')+'</button></div>'+
+    '<div class="pf-imgwrap"><img id="pf-img" src="'+prodImg(p)+'"><div class="pf-imgbtns"><button class="btn btn-outline btn-sm" data-action="pf-foto">'+ic('camera')+' '+(p.foto?'Trocar foto':'Adicionar foto')+'</button>'+(p.foto?'<button class="btn btn-red btn-sm" data-action="pf-rm-foto">'+ic('trash')+' Remover foto</button>':'')+'</div></div>'+
     '<div class="field"><label>Nome</label><input id="pf-nome" value="'+esc(p.nome)+'"></div>'+
     '<div class="field"><label>Descrição</label><textarea id="pf-desc">'+esc(p.desc)+'</textarea></div>'+
     '<div class="row2"><div class="field"><label>Preço base (R$)</label><input id="pf-preco" inputmode="decimal" value="'+esc(p.preco)+'"></div>'+
@@ -1289,6 +1295,7 @@ function prodFormHTML(){
     (novo?'':'<div class="row2" style="margin-top:8px"><button class="btn btn-ghost" data-action="pf-dup">Duplicar</button><button class="btn btn-red" data-action="pf-arquivar">Arquivar</button></div>')+'</div>';
 }
 on('pf-foto',function(){ captureProdForm(); pickImage(function(u){ UI.adm._pedit.foto=u; modal(prodFormHTML()); toast('Foto adicionada','ok'); }); });
+on('pf-rm-foto',function(){ captureProdForm(); UI.adm._pedit.foto=null; modal(prodFormHTML()); toast('Foto removida (usa o ícone da categoria)','info'); });
 on('pf-add-var',function(){ captureProdForm(); modal('<h2>Nova opção</h2><div class="field"><label>Nome</label><input id="v-nome" placeholder="Ex.: Completo"></div><div class="field"><label>Preço (R$)</label><input id="v-preco" inputmode="decimal" value="0"></div><div class="field"><label>Acompanha (separado por vírgula, opcional)</label><input id="v-incl" placeholder="Arroz, Feijão, Macaxeira, Vinagrete"></div><div class="sticky-cta"><button class="btn btn-primary btn-block" data-action="pf-add-var-ok">Adicionar</button></div>',true); });
 on('pf-add-var-ok',function(){ var n=$('v-nome').value.trim(); if(!n){ toast('Informe o nome','err'); return; } var incl=($('v-incl').value||'').split(',').map(function(s){return s.trim();}).filter(Boolean); UI.adm._pedit.variacoes.push({nome:n,preco:parseFloat(String($('v-preco').value).replace(',','.'))||0,inclui:incl}); modal(prodFormHTML()); });
 on('pf-rm-var',function(d){ captureProdForm(); UI.adm._pedit.variacoes.splice(+d.i,1); modal(prodFormHTML()); });
@@ -1402,5 +1409,5 @@ if(bc){ bc.onmessage=function(ev){ if(ev&&ev.data&&ev.data!==lastRev){ lastRev=e
 window.addEventListener('storage', function(e){ if(e.key===LSKEY||e.key===REVKEY) syncCheck(); });
 window.addEventListener('focus', syncCheck);
 if(typeof document!=='undefined') document.addEventListener('visibilitychange', function(){ if(!document.hidden) syncCheck(); });
-setInterval(syncCheck, 1500);
+setInterval(syncCheck, 1000);
 boot();
